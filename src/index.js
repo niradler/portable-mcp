@@ -143,8 +143,7 @@ export class McpManager {
         }
       }
 
-      spinner.text = 'Downloading Gist content...';
-
+      spinner.succeed('Gist information fetched');
 
       const rawUrl = targetFile.raw_url;
       return await this.downloadJson(rawUrl);
@@ -193,12 +192,12 @@ export class McpManager {
 
     await this.ensureDestinationDir(destination);
 
-    const spinner = ora('Replacing configuration...').start();
+    const spinner = ora('Writing configuration file...').start();
     try {
       await fs.writeFile(destination, JSON.stringify(jsonData, null, 2), 'utf8');
       spinner.succeed(`Configuration replaced at: ${destination}`);
     } catch (error) {
-      spinner.fail('Failed to replace configuration');
+      spinner.fail('Failed to write configuration');
       throw error;
     }
   }
@@ -210,10 +209,9 @@ export class McpManager {
 
     await this.ensureDestinationDir(destination);
 
-    const spinner = ora('Merging configuration...').start();
+    const spinner = ora('Merging and writing configuration...').start();
     try {
       let existingData = {};
-
 
       try {
         const existingContent = await fs.readFile(destination, 'utf8');
@@ -221,7 +219,6 @@ export class McpManager {
       } catch {
 
       }
-
 
       const mergedData = this.deepMerge(existingData, newJsonData);
 
