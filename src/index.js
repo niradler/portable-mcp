@@ -6,6 +6,7 @@ import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import ora from 'ora';
+import chalk from 'chalk';
 
 const execAsync = promisify(exec);
 
@@ -29,7 +30,7 @@ export class McpManager {
       case 'claude':
         return this.platform === 'darwin'
           ? path.join(homeDir, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-          : path.join(homeDir, '.claude', 'claude_desktop_config.json');
+          : path.join(homeDir, 'AppData', 'Roaming', 'Claude', 'claude_desktop_config.json');
 
       default:
         throw new Error(`Unsupported type: ${type}. Supported types: cursor, claude`);
@@ -261,12 +262,11 @@ export class McpManager {
   async store(options) {
     const sourcePath = options.source || this.getDestination({ type: options.type });
 
-
     const spinner = ora('Reading configuration file...').start();
+    let configContent;
     try {
       await fs.access(sourcePath);
-      const configContent = await fs.readFile(sourcePath, 'utf8');
-
+      configContent = await fs.readFile(sourcePath, 'utf8');
 
       JSON.parse(configContent);
 
@@ -277,7 +277,6 @@ export class McpManager {
     }
 
     const fileName = `${options.type || 'mcp'}.json`;
-
 
     if (this.githubToken) {
       return await this.storeWithApi(configContent, fileName, options);
@@ -384,15 +383,53 @@ export class McpManager {
       const result = await response.json();
 
       spinner.succeed('Uploaded to Gist using GitHub API');
-
+      const id = result.id.split('/').pop();
       return {
         id: result.id,
         url: result.html_url,
-        viewCommand: `gh gist view ${result.id}`
+        viewCommand: `gh gist view ${id}`
       };
     } catch (error) {
       spinner.fail('Failed to upload using GitHub API');
       throw error;
     }
+  }
+
+  static displayStoreResult(result, isInteractive = false) {
+    const prefix = isInteractive ? '\n' : '';
+    console.log(chalk.green(`${prefix}✅ ${isInteractive ? 'Successfully uploaded to Gist!' : 'Configuration uploaded to Gist!'}`));
+    console.log(chalk.blue('📋 Gist ID:'), result.id);
+    if (result.viewCommand) {
+      console.log(chalk.blue('👀 View with:'), chalk.white(result.viewCommand));
+      if (isInteractive) {
+        console.log(chalk.gray('\n💡 Use the view command above to see the gist content'));
+      }
+    }
+  }
+
+  static displayOperationResult(operation, destination) {
+    console.log(chalk.green(`\n✅ Configuration ${operation}d successfully!`));
+    console.log(chalk.blue('📁 Location:'), destination);
+  }
+
+  static displayError(message, isInteractive = false) {
+    const prefix = isInteractive ? '\n' : '';
+    console.error(chalk.red(`${prefix}❌ ${isInteractive ? 'Failed to upload:' : 'Error:'}`), message);
+  }
+
+  static handleCliError(error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
+  }
+
+  static getAppChoices() {
+    return [
+      { name: 'Cursor', value: 'cursor' },
+      { name: 'Claude Desktop', value: 'claude' }
+    ];
+  }
+
+  static createTextInputValidator(type) {
+    return (input) => input.trim() ? true : `Please enter a valid ${type}`;
   }
 }

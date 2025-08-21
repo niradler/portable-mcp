@@ -35,10 +35,7 @@ export async function promptMode() {
         type: 'list',
         name: 'type',
         message: 'Which application?',
-        choices: [
-          { name: 'Cursor', value: 'cursor' },
-          { name: 'Claude Desktop', value: 'claude' }
-        ]
+        choices: McpManager.getAppChoices()
       }
     ]);
 
@@ -64,8 +61,7 @@ async function handleStorePrompt(manager) {
       name: 'type',
       message: 'Which configuration do you want to upload?',
       choices: [
-        { name: 'Cursor', value: 'cursor' },
-        { name: 'Claude Desktop', value: 'claude' },
+        ...McpManager.getAppChoices(),
         { name: 'Custom path', value: 'custom' }
       ]
     }
@@ -80,7 +76,7 @@ async function handleStorePrompt(manager) {
         type: 'input',
         name: 'customPath',
         message: 'Enter the path to your configuration file:',
-        validate: (input) => input.trim() ? true : 'Please enter a valid path'
+        validate: McpManager.createTextInputValidator('path')
       }
     ]);
     sourcePath = customPath;
@@ -104,7 +100,7 @@ async function handleStorePrompt(manager) {
         type: 'input',
         name: 'existingGist',
         message: 'Enter the Gist ID:',
-        validate: (input) => input.trim() ? true : 'Please enter a valid Gist ID'
+        validate: McpManager.createTextInputValidator('Gist ID')
       }
     ]);
     gistId = existingGist;
@@ -127,15 +123,9 @@ async function handleStorePrompt(manager) {
       private: isPrivate
     });
 
-    console.log(chalk.green('\n✅ Successfully uploaded to Gist!'));
-    console.log(chalk.blue('🔗 Gist URL:'), result.url);
-    console.log(chalk.blue('📋 Gist ID:'), result.id);
-    if (result.viewCommand) {
-      console.log(chalk.blue('👀 View with:'), chalk.white(result.viewCommand));
-      console.log(chalk.gray('\n💡 Use the view command above to see the gist content'));
-    }
+    McpManager.displayStoreResult(result, true);
   } catch (error) {
-    console.error(chalk.red('\n❌ Failed to upload:'), error.message);
+    McpManager.displayError(error.message, true);
   }
 }
 
@@ -180,7 +170,7 @@ async function handleReplaceOrMergePrompt(manager, action) {
         type: 'input',
         name: 'gistInput',
         message: 'Enter Gist ID or ID/filename (for multi-file Gists):',
-        validate: (input) => input.trim() ? true : 'Please enter a valid Gist ID'
+        validate: McpManager.createTextInputValidator('Gist ID')
       }
     ]);
     sourceOptions.gist = gistInput;
@@ -208,7 +198,7 @@ async function handleReplaceOrMergePrompt(manager, action) {
         type: 'input',
         name: 'customDest',
         message: 'Enter the destination path:',
-        validate: (input) => input.trim() ? true : 'Please enter a valid path'
+        validate: McpManager.createTextInputValidator('path')
       }
     ]);
     destOptions.destination = customDest;
@@ -244,8 +234,7 @@ async function handleReplaceOrMergePrompt(manager, action) {
       await manager.merge(options);
     }
 
-    console.log(chalk.green(`\n✅ Configuration ${action}d successfully!`));
-    console.log(chalk.blue('📁 Location:'), destination);
+    McpManager.displayOperationResult(action, destination);
   } catch (error) {
     console.error(chalk.red(`\n❌ Failed to ${action} configuration:`), error.message);
   }

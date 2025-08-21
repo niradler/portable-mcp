@@ -26,8 +26,7 @@ program
       await manager.replace(options);
       console.log(chalk.green('✅ Configuration replaced successfully!'));
     } catch (error) {
-      console.error(chalk.red('❌ Error:'), error.message);
-      process.exit(1);
+      McpManager.handleCliError(error);
     }
   });
 
@@ -45,8 +44,7 @@ program
       await manager.merge(options);
       console.log(chalk.green('✅ Configuration merged successfully!'));
     } catch (error) {
-      console.error(chalk.red('❌ Error:'), error.message);
-      process.exit(1);
+      McpManager.handleCliError(error);
     }
   });
 
@@ -61,8 +59,7 @@ program
       const path = manager.getDefaultPath(options.type);
       console.log(chalk.blue('📁 Default path:'), path);
     } catch (error) {
-      console.error(chalk.red('❌ Error:'), error.message);
-      process.exit(1);
+      McpManager.handleCliError(error);
     }
   });
 
@@ -78,15 +75,9 @@ program
     try {
       const manager = new McpManager();
       const result = await manager.store(options);
-      console.log(chalk.green('✅ Configuration uploaded to Gist!'));
-      console.log(chalk.blue('🔗 Gist URL:'), result.url);
-      console.log(chalk.blue('📋 Gist ID:'), result.id);
-      if (result.viewCommand) {
-        console.log(chalk.blue('👀 View with:'), chalk.white(result.viewCommand));
-      }
+      McpManager.displayStoreResult(result);
     } catch (error) {
-      console.error(chalk.red('❌ Error:'), error.message);
-      process.exit(1);
+      McpManager.handleCliError(error);
     }
   });
 
@@ -98,8 +89,7 @@ program
     try {
       await promptMode();
     } catch (error) {
-      console.error(chalk.red('❌ Error:'), error.message);
-      process.exit(1);
+      McpManager.handleCliError(error);
     }
   });
 
