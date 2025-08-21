@@ -1,11 +1,11 @@
 {
   "name": "portable-mcp",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A CLI tool to manage MCP configurations across different environments (Cursor, Claude Desktop)",
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "portable-mcp": "./src/cli.js"
+    "portable-mcp": "src/cli.js"
   },
   "scripts": {
     "dev": "node src/cli.js",
@@ -31,5 +31,17 @@
   },
   "engines": {
     "node": ">=16.0.0"
-  }
+  },
+  "directories": {
+    "example": "examples"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/niradler/portable-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/niradler/portable-mcp/issues"
+  },
+  "homepage": "https://github.com/niradler/portable-mcp#readme"
 }
