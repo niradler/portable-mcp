@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -12,7 +11,6 @@ const execAsync = promisify(exec);
 
 export class McpManager {
   constructor() {
-    this.tempDir = process.env.PORTABLE_MCP_TMP || path.join(os.homedir(), '.tmp', 'portable-mcp');
     this.githubToken = process.env.GITHUB_TOKEN;
     this.platform = os.platform();
   }
@@ -38,41 +36,10 @@ export class McpManager {
   }
 
 
-  async ensureTempDir() {
-    try {
-      await fs.access(this.tempDir);
-    } catch {
-      await fs.mkdir(this.tempDir, { recursive: true });
-    }
-  }
-
-
-  getCacheFileName(url) {
-    const hash = crypto.createHash('md5').update(url).digest('hex');
-    return `${hash}.json`;
-  }
-
-
   async downloadJson(url) {
     const spinner = ora('Downloading configuration...').start();
 
     try {
-      await this.ensureTempDir();
-      const cacheFile = path.join(this.tempDir, this.getCacheFileName(url));
-
-
-      try {
-        const stats = await fs.stat(cacheFile);
-        const hourAgo = Date.now() - (60 * 60 * 1000);
-        if (stats.mtime.getTime() > hourAgo) {
-          spinner.succeed('Using cached configuration');
-          const cachedData = await fs.readFile(cacheFile, 'utf8');
-          return JSON.parse(cachedData);
-        }
-      } catch {
-
-      }
-
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
@@ -80,9 +47,6 @@ export class McpManager {
 
       const jsonText = await response.text();
       const jsonData = JSON.parse(jsonText);
-
-
-      await fs.writeFile(cacheFile, jsonText, 'utf8');
 
       spinner.succeed('Configuration downloaded successfully');
       return jsonData;
@@ -263,46 +227,41 @@ export class McpManager {
     const sourcePath = options.source || this.getDestination({ type: options.type });
 
     const spinner = ora('Reading configuration file...').start();
-    let configContent;
     try {
       await fs.access(sourcePath);
-      configContent = await fs.readFile(sourcePath, 'utf8');
-
-      JSON.parse(configContent);
-
       spinner.succeed('Configuration file loaded');
     } catch (error) {
       spinner.fail('Failed to read configuration file');
       throw new Error(`Cannot read source file: ${sourcePath}. ${error.message}`);
     }
 
-    const fileName = `${options.type || 'mcp'}.json`;
-
     if (this.githubToken) {
-      return await this.storeWithApi(configContent, fileName, options);
+      return await this.storeWithApi(sourcePath, options);
     } else if (await this.hasGitHubCli()) {
-      return await this.storeWithGhCli(configContent, fileName, options);
+      return await this.storeWithGhCli(sourcePath, options);
     } else {
       throw new Error('Either GITHUB_TOKEN environment variable or authenticated GitHub CLI is required');
     }
   }
 
-  async storeWithGhCli(content, fileName, options) {
+  async storeWithGhCli(sourcePath, options) {
     const spinner = ora('Uploading to Gist using GitHub CLI...').start();
 
     try {
-      await this.ensureTempDir();
-      const tempFile = path.join(this.tempDir, fileName);
-      await fs.writeFile(tempFile, content, 'utf8');
-
       let command;
       let gistId = options.gist;
 
+      const sourceFileName = path.basename(sourcePath);
+
       if (options.gist) {
-        command = `gh gist edit ${options.gist} ${tempFile}`;
+        const { id, fileName } = this.gistIdToConfig(options.gist);
+        gistId = id;
+        const targetFileName = fileName || sourceFileName;
+        command = `gh gist edit ${id} --filename ${targetFileName} "${sourcePath}"`;
+        await execAsync(command);
       } else {
         const visibility = options.private ? '--secret' : '--public';
-        command = `gh gist create ${visibility} ${tempFile}`;
+        command = `gh gist create ${visibility} "${sourcePath}"`;
 
         const { stdout } = await execAsync(command);
         const gistUrl = stdout.trim();
@@ -315,8 +274,6 @@ export class McpManager {
         }
       }
 
-      await fs.unlink(tempFile);
-
       spinner.succeed('Uploaded to Gist using GitHub CLI');
 
       let username;
@@ -327,10 +284,13 @@ export class McpManager {
         username = null;
       }
 
+      const { fileName } = options.gist ? this.gistIdToConfig(options.gist) : {};
+      const targetFileName = fileName || sourceFileName;
+
       return {
         id: gistId,
         url: gistId ? `https://gist.github.com/${username ? username + '/' : ''}${gistId}` : null,
-        viewCommand: `gh gist view ${gistId}`
+        viewCommand: `gh gist view ${gistId} --filename ${targetFileName}`
       };
     } catch (error) {
       spinner.fail('Failed to upload using GitHub CLI');
@@ -339,7 +299,7 @@ export class McpManager {
   }
 
 
-  async storeWithApi(content, fileName, options) {
+  async storeWithApi(sourcePath, options) {
     if (!this.githubToken) {
       throw new Error('GITHUB_TOKEN environment variable is required for API uploads');
     }
@@ -347,22 +307,30 @@ export class McpManager {
     const spinner = ora('Uploading to Gist using GitHub API...').start();
 
     try {
+      const sourceFileName = path.basename(sourcePath);
+      let id = null;
+      let fileName = sourceFileName;
+
+      if (options.gist) {
+        const gistConfig = this.gistIdToConfig(options.gist);
+        id = gistConfig.id;
+        fileName = gistConfig.fileName || sourceFileName;
+      }
+
       const gistData = {
         files: {
           [fileName]: {
-            content: content
+            content: await fs.readFile(sourcePath, 'utf8')
           }
         },
         public: !options.private
       };
 
       let url, method;
-      if (options.gist) {
-
-        url = `https://api.github.com/gists/${options.gist}`;
+      if (id) {
+        url = `https://api.github.com/gists/${id}`;
         method = 'PATCH';
       } else {
-
         url = 'https://api.github.com/gists';
         method = 'POST';
       }
@@ -383,16 +351,23 @@ export class McpManager {
       const result = await response.json();
 
       spinner.succeed('Uploaded to Gist using GitHub API');
-      const id = result.id.split('/').pop();
       return {
         id: result.id,
         url: result.html_url,
-        viewCommand: `gh gist view ${id}`
+        viewCommand: `gh gist view ${result.id}`
       };
     } catch (error) {
       spinner.fail('Failed to upload using GitHub API');
       throw error;
     }
+  }
+
+  gistIdToConfig(gistInput) {
+    const [id, fileName] = gistInput.split('/');
+    return {
+      id: id,
+      fileName: fileName
+    };
   }
 
   static displayStoreResult(result, isInteractive = false) {
